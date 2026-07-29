@@ -8,6 +8,23 @@ from __future__ import annotations
 from .runtime import extract_json, run_agent
 from .state import ResearchState
 
+
+def _require_list(data: dict, key: str, agent: str) -> list:
+    """Read a required list off an agent's JSON hand-off.
+
+    Defaulting a missing key to [] would let a malformed response flow
+    through the pipeline as an empty section instead of surfacing the error.
+    """
+    value = data.get(key)
+    if not isinstance(value, list):
+        raise ValueError(
+            f"{agent} returned no usable '{key}' list "
+            f"(got keys: {sorted(data)}). The response did not match the "
+            f"expected hand-off schema."
+        )
+    return value
+
+
 # ---------------------------------------------------------------------------
 # 1. Search agent
 # ---------------------------------------------------------------------------
@@ -43,7 +60,7 @@ def run_search_agent(state: ResearchState) -> ResearchState:
     result = run_agent(SEARCH_SYSTEM_PROMPT, user_message, use_web_search=True)
     data = extract_json(result.text)
 
-    state.sources = data.get("sources", [])
+    state.sources = _require_list(data, "sources", "SearchAgent")
     state.raw_notes = data.get("raw_notes", "")
     state.search_tool_calls = result.tool_calls_made
     state.log_handoff(
@@ -95,7 +112,9 @@ def run_summarize_agent(state: ResearchState) -> ResearchState:
     result = run_agent(SUMMARIZE_SYSTEM_PROMPT, user_message)
     data = extract_json(result.text)
 
-    state.summary_sections = data.get("summary_sections", [])
+    state.summary_sections = _require_list(
+        data, "summary_sections", "SummarizeAgent"
+    )
     state.log_handoff(
         "SummarizeAgent",
         "FactCheckAgent",
@@ -144,8 +163,10 @@ def run_factcheck_agent(state: ResearchState) -> ResearchState:
     result = run_agent(FACTCHECK_SYSTEM_PROMPT, user_message, use_web_search=True)
     data = extract_json(result.text)
 
-    state.verified_claims = data.get("verified_claims", [])
-    state.flagged_claims = data.get("flagged_claims", [])
+    state.verified_claims = _require_list(
+        data, "verified_claims", "FactCheckAgent"
+    )
+    state.flagged_claims = _require_list(data, "flagged_claims", "FactCheckAgent")
     state.factcheck_tool_calls = result.tool_calls_made
     state.log_handoff(
         "FactCheckAgent",

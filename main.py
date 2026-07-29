@@ -13,6 +13,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+# Windows consoles default to a legacy codepage, which mangles the bullets and
+# dashes in rendered Markdown reports.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
+
 from multi_research_agent.orchestrator import run_pipeline  # noqa: E402
 
 
@@ -28,9 +34,12 @@ def main() -> None:
 
     try:
         run_pipeline(topic)
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         print(f"Error: {exc}")
         sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        sys.exit(130)
 
 
 if __name__ == "__main__":
